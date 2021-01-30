@@ -1,26 +1,86 @@
 use eframe::{egui, epi};
+use image::GenericImageView;
+// use std::fs::File;
+
+// ----------------------------------------------------------------------------
+// Texture/image handling is very manual at the moment.
+
+/// Immediate mode texture manager that supports at most one texture at the time :)
+#[derive(Default)]
+struct TexMngr {
+    loaded_filename: String,
+    texture_id: Option<egui::TextureId>,
+}
+
+impl TexMngr {
+    fn texture(
+        &mut self,
+        frame: &mut epi::Frame<'_>,
+        filename: &str,
+        image: &Image,
+    ) -> Option<egui::TextureId> {
+        let tex_allocator = frame.tex_allocator().as_mut()?;
+        if self.loaded_filename != filename {
+            if let Some(texture_id) = self.texture_id.take() {
+                tex_allocator.free(texture_id);
+            }
+
+            self.texture_id =
+                Some(tex_allocator.alloc_srgba_premultiplied(image.size, &image.pixels));
+            self.loaded_filename = filename.to_owned();
+        }
+        self.texture_id
+    }
+}
+
+pub struct Image {
+    size: (usize, usize),
+    pixels: Vec<egui::Color32>,
+}
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-pub struct TemplateApp {
+pub struct ImageApp {
     // Example stuff:
     label: String,
     value: f32,
-    painting: Painting,
+    filename: String,
+    #[cfg_attr(feature = "persistence", serde(skip))]
+    image: Image,
+    #[cfg_attr(feature = "persistence", serde(skip))]
+    tex_mngr: TexMngr,
+
 }
 
-impl Default for TemplateApp {
+impl Default for ImageApp {
     fn default() -> Self {
+
+        // Decode the jpeg using image::GenericImageView, then paint into the screen
+        // following egui url image loading example in egui/egui_demo_lib/src/app/http_app.rs
+        let filename = "data/gradient_rect.jpg";
+        let image = image::open(filename).unwrap();  // .decode().unwrap();
+        let image_buffer = image.to_rgba8();
+        let size = (image.width() as usize, image.height() as usize);
+        println!("{} {:?}", filename, size);
+        let pixels = image_buffer.into_vec();
+        assert_eq!(size.0 * size.1 * 4, pixels.len());
+        let pixels = pixels
+            .chunks(4)
+            .map(|p| egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
+            .collect();
+
         Self {
             // Example stuff:
             label: "Hello World!".to_owned(),
             value: 2.7,
-            painting: Default::default(),
+            filename: (&filename).to_string(),
+            image: Image { size, pixels },
+            tex_mngr: Default::default(),
         }
     }
 }
 
-impl epi::App for TemplateApp {
+impl epi::App for ImageApp {
     fn name(&self) -> &str {
         "Egui template"
     }
@@ -40,10 +100,12 @@ impl epi::App for TemplateApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
-        let TemplateApp {
+        let ImageApp {
             label,
             value,
-            painting,
+            filename,
+            image,
+            tex_mngr,
         } = self;
 
         // Examples of how to create different panels and windows.
@@ -51,6 +113,7 @@ impl epi::App for TemplateApp {
         // Tip: a good default choice is to just keep the `CentralPanel`.
         // For inspiration and more examples, go to https://emilk.github.io/egui
 
+        if false {
         egui::SidePanel::left("side_panel", 200.0).show(ctx, |ui| {
             ui.heading("Side Panel");
 
@@ -81,12 +144,13 @@ impl epi::App for TemplateApp {
                 });
             });
         });
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Egui Template");
-            ui.hyperlink("https://github.com/emilk/egui_template");
+            ui.heading("Egui Image");
+            ui.hyperlink("https://github.com/lucasw/egui_image");
             ui.add(egui::github_link_file_line!(
-                "https://github.com/emilk/egui_template/blob/master/",
+                "https://github.com/lucasw/egui_image/blob/main/",
                 "Direct link to source code."
             ));
             egui::warn_if_debug_build(ui);
@@ -97,11 +161,11 @@ impl epi::App for TemplateApp {
             ui.label("The central panel the region left after adding TopPanel's and SidePanel's");
             ui.label("It is often a great place for big things, like drawings:");
 
-            ui.heading("Draw with your mouse to paint:");
-            painting.ui_control(ui);
-            egui::Frame::dark_canvas(ui.style()).show(ui, |ui| {
-                painting.ui_content(ui);
-            });
+            if let Some(texture_id) = tex_mngr.texture(frame, &filename, image) {
+                // Can change aspect ration here as desired
+                let size = egui::Vec2::new((image.size.0 * 2) as f32, (image.size.1 * 4) as f32);
+                ui.image(texture_id, size);
+            }
         });
 
         if false {
@@ -120,6 +184,7 @@ impl epi::App for TemplateApp {
 
 // ----------------------------------------------------------------------------
 
+/*
 /// Example code for painting on a canvas with your mouse
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 struct Painting {
@@ -180,3 +245,4 @@ impl Painting {
         response
     }
 }
+*/

@@ -1,5 +1,5 @@
 [package]
-name = "egui_template"
+name = "egui_image"
 version = "0.1.0"
 authors = ["Emil Ernerfeldt <emilernerfeldt@gmail.com>"]
 edition = "2018"
@@ -10,13 +10,13 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-eframe = "0.7" # Gives us egui, epi and web+native backends
-
+eframe = "0.8.0" # Gives us egui, epi and web+native backends
+image = "0.23" # { version = "0.23", default_features = false, features = ["jpeg", "png"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 
 [features]
 default = []
-http = ["eframe/http"] # Enable if you want to do http requests
+# http = ["eframe/http"] # Enable if you want to do http requests
 persistence = ["eframe/persistence", "serde"] # Enable if you want to persist app state on shutdown
 
 [profile.release]
