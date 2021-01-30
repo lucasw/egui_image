@@ -2,6 +2,9 @@ use eframe::{egui, epi};
 use image::GenericImageView;
 // use std::fs::File;
 
+// TODO(lucasw) create a library that is just for image pixels manipulation
+// this file should just be the egui ui layer
+
 // ----------------------------------------------------------------------------
 // Texture/image handling is very manual at the moment.
 
@@ -43,7 +46,8 @@ pub struct Image {
 pub struct ImageApp {
     // Example stuff:
     label: String,
-    value: f32,
+    x_scale: f32,
+    y_scale: f32,
     filename: String,
     #[cfg_attr(feature = "persistence", serde(skip))]
     image: Image,
@@ -70,7 +74,8 @@ impl Default for ImageApp {
         Self {
             // Example stuff:
             label: "Hello World!".to_owned(),
-            value: 2.7,
+            x_scale: 4.0,
+            y_scale: 4.0,
             filename: (&filename).to_string(),
             image: Image { size, pixels },
             tex_mngr: Default::default(),
@@ -100,7 +105,8 @@ impl epi::App for ImageApp {
     fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
         let ImageApp {
             label,
-            value,
+            x_scale,
+            y_scale,
             filename,
             image,
             tex_mngr,
@@ -120,9 +126,8 @@ impl epi::App for ImageApp {
                     ui.text_edit_singleline(label);
                 });
 
-                ui.add(egui::Slider::f32(value, 0.0..=10.0).text("value"));
                 if ui.button("Increment").clicked {
-                    *value += 1.0;
+                    *x_scale += 1.0;
                 }
 
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
@@ -159,12 +164,17 @@ impl epi::App for ImageApp {
             ui.heading("Central Panel");
             ui.label("The central panel the region left after adding TopPanel's and SidePanel's");
             ui.label("It is often a great place for big things, like drawings:");
+            ui.add(egui::Slider::f32(x_scale, 0.1..=10.0).text("x scale"));
+            ui.add(egui::Slider::f32(y_scale, 0.1..=10.0).text("y scale"));
 
-            if let Some(texture_id) = tex_mngr.texture(frame, &filename, image) {
-                // Can change aspect ration here as desired
-                let size = egui::Vec2::new((image.size.0 * 2) as f32, (image.size.1 * 4) as f32);
-                ui.image(texture_id, size);
-            }
+            egui::ScrollArea::auto_sized().show(ui, |ui| {
+                if let Some(texture_id) = tex_mngr.texture(frame, &filename, image) {
+                    // Can change aspect ration here as desired
+                    let size = egui::Vec2::new(image.size.0 as f32 * *x_scale,
+                                               image.size.1 as f32 * *y_scale);
+                    ui.image(texture_id, size);
+                }
+            });
         });
 
         if false {
@@ -176,8 +186,9 @@ impl epi::App for ImageApp {
             });
         }
 
+        // TODO(lucasw) this is a little glitchy when resizing the image
         // Resize the native window to be just the size we need it to be:
-        frame.set_window_size(ctx.used_size());
+        // frame.set_window_size(ctx.used_size());
     }
 }
 
