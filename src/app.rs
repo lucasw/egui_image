@@ -11,7 +11,6 @@ use image::GenericImageView;
 /// Immediate mode texture manager that supports at most one texture at the time :)
 #[derive(Default)]
 struct TexMngr {
-    loaded_filename: String,
     texture_id: Option<egui::TextureId>,
 }
 
@@ -19,18 +18,18 @@ impl TexMngr {
     fn texture(
         &mut self,
         frame: &mut epi::Frame<'_>,
-        filename: &str,
+        // filename: &str,
+        update: bool,
         image: &Image,
     ) -> Option<egui::TextureId> {
         let tex_allocator = frame.tex_allocator().as_mut()?;
-        if self.loaded_filename != filename {
+        if update {
             if let Some(texture_id) = self.texture_id.take() {
                 tex_allocator.free(texture_id);
             }
 
             self.texture_id =
                 Some(tex_allocator.alloc_srgba_premultiplied(image.size, &image.pixels));
-            self.loaded_filename = filename.to_owned();
         }
         self.texture_id
     }
@@ -48,7 +47,8 @@ pub struct ImageApp {
     label: String,
     x_scale: f32,
     y_scale: f32,
-    filename: String,
+    y_ind: usize,
+    // filename: String,
     #[cfg_attr(feature = "persistence", serde(skip))]
     image: Image,
     #[cfg_attr(feature = "persistence", serde(skip))]
@@ -76,7 +76,8 @@ impl Default for ImageApp {
             label: "Hello World!".to_owned(),
             x_scale: 4.0,
             y_scale: 4.0,
-            filename: (&filename).to_string(),
+            y_ind: 30,
+            // filename: (&filename).to_string(),
             image: Image { size, pixels },
             tex_mngr: Default::default(),
         }
@@ -107,7 +108,8 @@ impl epi::App for ImageApp {
             label,
             x_scale,
             y_scale,
-            filename,
+            y_ind,
+            // filename,
             image,
             tex_mngr,
         } = self;
@@ -167,9 +169,23 @@ impl epi::App for ImageApp {
             ui.add(egui::Slider::f32(x_scale, 0.1..=10.0).text("x scale"));
             ui.add(egui::Slider::f32(y_scale, 0.1..=10.0).text("y scale"));
 
+            ui.add(egui::Slider::usize(y_ind, 0..=(image.size.1 - 1)).text("y ind"));
+
             egui::ScrollArea::auto_sized().show(ui, |ui| {
-                if let Some(texture_id) = tex_mngr.texture(frame, &filename, image) {
-                    // Can change aspect ration here as desired
+
+                // update the image pixels
+                {
+                    for x in 0..255 {
+                        if x >= image.size.0 {
+                            break;
+                        }
+                        let ind = *y_ind * image.size.0 + x;
+                        image.pixels[ind] = egui::Color32::from_rgb(*y_ind as u8, x as u8, 0);
+                    }
+                }
+                let update = true;
+
+                if let Some(texture_id) = tex_mngr.texture(frame, update, image) {
                     let size = egui::Vec2::new(image.size.0 as f32 * *x_scale,
                                                image.size.1 as f32 * *y_scale);
                     ui.image(texture_id, size);
