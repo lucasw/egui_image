@@ -40,6 +40,49 @@ pub struct Image {
     pixels: Vec<egui::Color32>,
 }
 
+// TODO(lucasw) move this into library/module, and make it generic on any
+// vector with a width and height and default value supplied.
+impl Image {
+    fn shift(&mut self, mut shift_x: i32, mut shift_y: i32) {
+        let mut shifted = vec![egui::Color32::BLUE; self.pixels.len()];
+
+        let width = self.size.0;
+        while shift_x < 0 {
+            shift_x += width as i32;
+        }
+        let shift_x = shift_x as usize;
+
+        let height = self.size.1;
+        while shift_y < 0 {
+            shift_y += height as i32;
+        }
+        let shift_y = shift_y as usize;
+
+        for y in 0..height {
+            for x in 0..width {
+                let dst_x = (x + shift_x) % width;
+                let dst_y = (y + shift_y) % height;
+                let dst_ind = dst_y * width + dst_x;
+                let ind = y * width + x;
+                shifted[dst_ind] = self.pixels[ind];
+            }
+        }
+        self.pixels = shifted;
+    }
+
+    /*
+    if false {
+        for x in 0..255 {
+            if x >= image.size.0 {
+                break;
+            }
+            let ind = *y_ind * image.size.0 + x;
+            image.pixels[ind] = egui::Color32::from_rgb(*y_ind as u8, x as u8, 0);
+        }
+    }
+    */
+}
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
 pub struct ImageApp {
@@ -82,6 +125,17 @@ impl Default for ImageApp {
             tex_mngr: Default::default(),
         }
     }
+}
+
+impl ImageApp {
+    // TODO(lucasw) trying to copy demo code for dancing strings to get a regular timer update
+    // even if window isn't active, but this isn't getting called by anything, there is special
+    // demo code infrastructure involved there.
+    /*
+    fn ui(&mut self, ui: &mut egui::Ui) {
+        println!("test");
+    }
+    */
 }
 
 impl epi::App for ImageApp {
@@ -172,22 +226,17 @@ impl epi::App for ImageApp {
             ui.add(egui::Slider::usize(y_ind, 0..=(image.size.1 - 1)).text("y ind"));
 
             egui::ScrollArea::auto_sized().show(ui, |ui| {
-
+                // TODO(lucsw) this is only happening when there is a mouse motion or other change
+                // over the window- as noted above the repaint needs to be triggered.
                 // update the image pixels
-                {
-                    for x in 0..255 {
-                        if x >= image.size.0 {
-                            break;
-                        }
-                        let ind = *y_ind * image.size.0 + x;
-                        image.pixels[ind] = egui::Color32::from_rgb(*y_ind as u8, x as u8, 0);
-                    }
-                }
+                image.shift(1, 0);
                 let update = true;
 
                 if let Some(texture_id) = tex_mngr.texture(frame, update, image) {
-                    let size = egui::Vec2::new(image.size.0 as f32 * *x_scale,
-                                               image.size.1 as f32 * *y_scale);
+                    let size = egui::Vec2::new(
+                        image.size.0 as f32 * *x_scale,
+                        image.size.1 as f32 * *y_scale,
+                    );
                     ui.image(texture_id, size);
                 }
             });
