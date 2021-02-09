@@ -7,6 +7,7 @@ use crate::utility::{Image, TexMngr};
 use crate::csv_plot::{get_filename, load_csv};
 use std::fs::File;
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
@@ -16,7 +17,8 @@ pub struct PlotImage {
     x_scale: f32,
     y_scale: f32,
     y_ind: usize,
-    // filename: String,
+    last_update: Instant,
+    filename: String,
     #[cfg_attr(feature = "persistence", serde(skip))]
     image: Image,
     #[cfg_attr(feature = "persistence", serde(skip))]
@@ -38,19 +40,23 @@ fn draw_point(image: &mut Image, x: f64, y: f64, color: egui::Color32) {
     image.pixels[ind] = color;
 }
 
-fn make_plot(x_scale: f64, y_scale: f64, y_offset: f64) -> Image {
-    let width: usize = 800;
-    let height: usize = 1000;
-    let size = (width, height);
-    let mut pixels = Vec::new();
-    for i in 0..(size.0 * size.1) {
-        pixels.push(egui::Color32::BLACK);
+fn make_plot(mut image: &mut Image, filename: &str,  x_scale: f64, y_scale: f64) {
+    let width = image.size.0;
+    let height = image.size.1;
+    let sc = 0.95;
+    for i in 0..(width * height) {
+        let r = image.pixels[i].r();
+        let g = image.pixels[i].g();
+        let b = image.pixels[i].b();
+        image.pixels[i] = egui::Color32::from_rgb(
+            (r as f64 * sc) as u8,
+            (g as f64 * sc) as u8,
+            (b as f64 * sc) as u8,
+        );
     }
-    let mut image = Image {size, pixels};
 
-    let filename = get_filename();
-    let path = Path::new(&filename);
-    let mut csv_file = match File::open(&path) {
+    let path = Path::new(filename);
+    let csv_file = match File::open(&path) {
         Err(why) => panic!("couldn't open {}: {}", path.display(), why),
         Ok(csv_file) => csv_file,
     };
@@ -63,22 +69,31 @@ fn make_plot(x_scale: f64, y_scale: f64, y_offset: f64) -> Image {
             (col_ind * 30) as u8,
             (255 - (col_ind * 20)) as u8,
             (50 + col_ind * 10) as u8);
+        let tiles = 2;
+        let x_offset = ((col_ind % tiles) * width / tiles + 10) as f64;
+        let y_offset = (col_ind / tiles) as f64 * 180.0 + 120.0;
 
         for (i, val) in column.iter().enumerate() {
-            let x = i as f64 * x_scale + 50.0;
-            let y_offset = y_offset + col_ind as f64 * 180.0;
-            let y = height as f64 - (val * y_scale + y_offset);
-            draw_point(&mut image, x, y, color);
+            let x = i as f64 * x_scale + 50.0 + x_offset;
+            let y = val * y_scale + y_offset;
+            draw_point(&mut image, x, height as f64 - y, color);
             draw_point(&mut image, x, height as f64 - y_offset, egui::Color32::GRAY);
         }
     }
-
-    image
 }
 
 impl Default for PlotImage {
     fn default() -> Self {
-        let image = make_plot(15.0, 50.0, 100.0);
+        let width: usize = 1000;
+        let height: usize = 600;
+        let size = (width, height);
+        let mut pixels = Vec::new();
+        for _ in 0..(size.0 * size.1) {
+            pixels.push(egui::Color32::BLACK);
+        }
+        let mut image = Image {size, pixels};
+        let filename = get_filename();
+        make_plot(&mut image, &filename, 10.0, 50.0);
 
         Self {
             // Example stuff:
@@ -86,7 +101,8 @@ impl Default for PlotImage {
             x_scale: 1.0,
             y_scale: 1.0,
             y_ind: 30,
-            // filename: (&filename).to_string(),
+            last_update: Instant::now(),
+            filename,
             image,
             tex_mngr: Default::default(),
         }
@@ -129,10 +145,23 @@ impl epi::App for PlotImage {
             x_scale,
             y_scale,
             y_ind,
-            // filename,
-            image,
+            last_update,
+            filename,
+            ref mut image,
             tex_mngr,
         } = self;
+
+        let update_image;
+        if last_update.elapsed() > Duration::from_millis(1000) {
+            make_plot(image, &filename, 10.0, 50.0);
+            *last_update = Instant::now();
+            update_image = true;
+        } else {
+            update_image = false;
+        }
+
+        // This take 100% cpu
+        ctx.request_repaint();
 
         // Examples of how to create different panels and windows.
         // Pick whichever suits you.
@@ -196,9 +225,8 @@ impl epi::App for PlotImage {
                 // over the window- as noted above the repaint needs to be triggered.
                 // update the image pixels
                 // image.shift(1, 0);
-                let update = true;
 
-                if let Some(texture_id) = tex_mngr.texture(frame, update, image) {
+                if let Some(texture_id) = tex_mngr.texture(frame, update_image, &image) {
                     let size = egui::Vec2::new(
                         image.size.0 as f32 * *x_scale,
                         image.size.1 as f32 * *y_scale,
@@ -219,7 +247,7 @@ impl epi::App for PlotImage {
 
         // TODO(lucasw) this is a little glitchy when resizing the image
         // Resize the native window to be just the size we need it to be:
-        // frame.set_window_size(ctx.used_size());
+        frame.set_window_size(ctx.used_size());
     }
 }
 

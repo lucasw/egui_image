@@ -16,7 +16,7 @@ use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::path::Path;
-use std::process;
+// use std::process;
 
 pub fn load_csv(csv_file: File) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
     // println!("loading '{}'", csv_file);
@@ -28,7 +28,6 @@ pub fn load_csv(csv_file: File) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
         // TODO(lucasw) Use a fixed size array inside the outer Vec
         let record = result?;
         if i == 0 {
-        let row: Vec<f64> = Vec::new();
             data.resize(record.len(), Vec::new());
             println!("processing {} columns", data.len());
         }
@@ -66,7 +65,7 @@ fn demo_load_csv() {
     let filename = get_filename();
 
     let path = Path::new(&filename);
-    let mut csv_file = match File::open(&path) {
+    let csv_file = match File::open(&path) {
         Err(why) => panic!("couldn't open {}: {}", path.display(), why),
         Ok(csv_file) => csv_file,
     };
