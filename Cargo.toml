@@ -13,6 +13,11 @@ crate-type = ["cdylib", "rlib"]
 name = "csv_plot"
 path = "src/csv_plot.rs"
 
+[[bin]]
+name = "csv_plot_image"
+path = "src/plot.rs"
+
+
 [dependencies]
 csv = "1.1"
 eframe = "0.8.0" # Gives us egui, epi and web+native backends

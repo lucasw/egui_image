@@ -18,7 +18,7 @@ use std::fs::File;
 use std::path::Path;
 use std::process;
 
-fn load_csv(csv_file: File) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
+pub fn load_csv(csv_file: File) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
     // println!("loading '{}'", csv_file);
 
     let mut data: Vec<Vec<f64>> = Vec::new();
@@ -48,7 +48,7 @@ fn load_csv(csv_file: File) -> Result<Vec<Vec<f64>>, Box<dyn Error>> {
     Ok(data)
 }
 
-fn get_filename() -> String {
+pub fn get_filename() -> String {
     let args: Vec<String> = env::args().collect();
     // println!("args {:?}", args);
     // load a csv file
@@ -62,7 +62,7 @@ fn get_filename() -> String {
     filename
 }
 
-fn main() {
+fn demo_load_csv() {
     let filename = get_filename();
 
     let path = Path::new(&filename);

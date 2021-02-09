@@ -1,11 +1,16 @@
+mod csv_plot;
+mod utility;
+
 use eframe::{egui, epi};
-use image::GenericImageView;
 // use std::fs::File;
 use crate::utility::{Image, TexMngr};
+use crate::csv_plot::{get_filename, load_csv};
+use std::fs::File;
+use std::path::Path;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-pub struct ImageApp {
+pub struct PlotImage {
     // Example stuff:
     label: String,
     x_scale: f32,
@@ -18,36 +23,77 @@ pub struct ImageApp {
     tex_mngr: TexMngr,
 }
 
-impl Default for ImageApp {
+fn draw_point(image: &mut Image, x: f64, y: f64, color: egui::Color32) {
+    let width = image.size.0;
+    if x < 0.0 || x as usize >= width {
+        return;
+    }
+    let height = image.size.1;
+    if y < 0.0 || y as usize >= height {
+        return;
+    }
+    let x = x as usize;
+    let y = y as usize;
+    let ind = y * width + x;
+    image.pixels[ind] = color;
+}
+
+fn make_plot(x_scale: f64, y_scale: f64, y_offset: f64) -> Image {
+    let width: usize = 800;
+    let height: usize = 1000;
+    let size = (width, height);
+    let mut pixels = Vec::new();
+    for i in 0..(size.0 * size.1) {
+        pixels.push(egui::Color32::BLACK);
+    }
+    let mut image = Image {size, pixels};
+
+    let filename = get_filename();
+    let path = Path::new(&filename);
+    let mut csv_file = match File::open(&path) {
+        Err(why) => panic!("couldn't open {}: {}", path.display(), why),
+        Ok(csv_file) => csv_file,
+    };
+
+    let columns = load_csv(csv_file).unwrap();
+
+    for (col_ind, column) in columns.iter().enumerate() {
+        // println!("{} {:?}", col_ind, column);
+        let color = egui::Color32::from_rgb(
+            (col_ind * 30) as u8,
+            (255 - (col_ind * 20)) as u8,
+            (50 + col_ind * 10) as u8);
+
+        for (i, val) in column.iter().enumerate() {
+            let x = i as f64 * x_scale + 50.0;
+            let y_offset = y_offset + col_ind as f64 * 180.0;
+            let y = height as f64 - (val * y_scale + y_offset);
+            draw_point(&mut image, x, y, color);
+            draw_point(&mut image, x, height as f64 - y_offset, egui::Color32::GRAY);
+        }
+    }
+
+    image
+}
+
+impl Default for PlotImage {
     fn default() -> Self {
-        // Decode the jpeg using image::GenericImageView, then paint into the screen
-        // following egui url image loading example in egui/egui_demo_lib/src/app/http_app.rs
-        let filename = "data/gradient_rect.jpg";
-        let image = image::open(filename).unwrap();
-        let image_buffer = image.to_rgba8();
-        let size = (image.width() as usize, image.height() as usize);
-        println!("{} {:?}", filename, size);
-        let pixels = image_buffer.into_vec();
-        assert_eq!(size.0 * size.1 * 4, pixels.len());
-        let pixels = pixels
-            .chunks(4)
-            .map(|p| egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
-            .collect();
+        let image = make_plot(15.0, 50.0, 100.0);
 
         Self {
             // Example stuff:
             label: "Hello World!".to_owned(),
-            x_scale: 4.0,
-            y_scale: 4.0,
+            x_scale: 1.0,
+            y_scale: 1.0,
             y_ind: 30,
             // filename: (&filename).to_string(),
-            image: Image { size, pixels },
+            image,
             tex_mngr: Default::default(),
         }
     }
 }
 
-impl ImageApp {
+impl PlotImage {
     // TODO(lucasw) trying to copy demo code for dancing strings to get a regular timer update
     // even if window isn't active, but this isn't getting called by anything, there is special
     // demo code infrastructure involved there.
@@ -58,7 +104,7 @@ impl ImageApp {
     */
 }
 
-impl epi::App for ImageApp {
+impl epi::App for PlotImage {
     fn name(&self) -> &str {
         "Egui template"
     }
@@ -78,7 +124,7 @@ impl epi::App for ImageApp {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
-        let ImageApp {
+        let PlotImage {
             label,
             x_scale,
             y_scale,
@@ -94,7 +140,7 @@ impl epi::App for ImageApp {
         // For inspiration and more examples, go to https://emilk.github.io/egui
 
         if false {
-            egui::SidePanel::left("side_panel", 200.0).show(ctx, |ui| {
+            egui::SidePanel::left("side_panel", 400.0).show(ctx, |ui| {
                 ui.heading("Side Panel");
 
                 ui.horizontal(|ui| {
@@ -149,7 +195,7 @@ impl epi::App for ImageApp {
                 // TODO(lucsw) this is only happening when there is a mouse motion or other change
                 // over the window- as noted above the repaint needs to be triggered.
                 // update the image pixels
-                image.shift(1, 0);
+                // image.shift(1, 0);
                 let update = true;
 
                 if let Some(texture_id) = tex_mngr.texture(frame, update, image) {
@@ -177,67 +223,9 @@ impl epi::App for ImageApp {
     }
 }
 
-// ----------------------------------------------------------------------------
-
-/*
-/// Example code for painting on a canvas with your mouse
-#[cfg_attr(feature = "persistence", derive(serde::Deserialize, serde::Serialize))]
-struct Painting {
-    lines: Vec<Vec<egui::Vec2>>,
-    stroke: egui::Stroke,
+// When compiling natively:
+#[cfg(not(target_arch = "wasm32"))]
+fn main() {
+    let app = PlotImage::default();
+    eframe::run_native(Box::new(app));
 }
-
-impl Default for Painting {
-    fn default() -> Self {
-        Self {
-            lines: Default::default(),
-            stroke: egui::Stroke::new(1.0, egui::Color32::LIGHT_BLUE),
-        }
-    }
-}
-
-impl Painting {
-    pub fn ui_control(&mut self, ui: &mut egui::Ui) -> egui::Response {
-        ui.horizontal(|ui| {
-            self.stroke.ui(ui, "Stroke");
-            ui.separator();
-            if ui.button("Clear Painting").clicked {
-                self.lines.clear();
-            }
-        })
-        .1
-    }
-
-    pub fn ui_content(&mut self, ui: &mut egui::Ui) -> egui::Response {
-        let (response, painter) =
-            ui.allocate_painter(ui.available_size_before_wrap_finite(), egui::Sense::drag());
-        let rect = response.rect;
-
-        if self.lines.is_empty() {
-            self.lines.push(vec![]);
-        }
-
-        let current_line = self.lines.last_mut().unwrap();
-
-        if response.active {
-            if let Some(mouse_pos) = ui.input().mouse.pos {
-                let canvas_pos = mouse_pos - rect.min;
-                if current_line.last() != Some(&canvas_pos) {
-                    current_line.push(canvas_pos);
-                }
-            }
-        } else if !current_line.is_empty() {
-            self.lines.push(vec![]);
-        }
-
-        for line in &self.lines {
-            if line.len() >= 2 {
-                let points: Vec<egui::Pos2> = line.iter().map(|p| rect.min + *p).collect();
-                painter.add(egui::PaintCmd::line(points, self.stroke));
-            }
-        }
-
-        response
-    }
-}
-*/
