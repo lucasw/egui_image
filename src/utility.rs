@@ -21,8 +21,8 @@ impl TexMngr {
         update: bool,
         image: &Image,
     ) -> Option<egui::TextureId> {
-        let tex_allocator = frame.tex_allocator().as_mut()?;
         if update {
+            let tex_allocator = frame.tex_allocator().as_mut()?;
             if let Some(texture_id) = self.texture_id.take() {
                 tex_allocator.free(texture_id);
             }

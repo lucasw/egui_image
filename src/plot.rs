@@ -3,8 +3,8 @@ mod utility;
 
 use eframe::{egui, epi};
 // use std::fs::File;
-use crate::utility::{Image, TexMngr};
 use crate::csv_plot::{get_filename, load_csv};
+use crate::utility::{Image, TexMngr};
 use std::fs::File;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -40,7 +40,7 @@ fn draw_point(image: &mut Image, x: f64, y: f64, color: egui::Color32) {
     image.pixels[ind] = color;
 }
 
-fn make_plot(mut image: &mut Image, filename: &str,  x_scale: f64, y_scale: f64) {
+fn make_plot(mut image: &mut Image, filename: &str, x_scale: f64, y_scale: f64) {
     let width = image.size.0;
     let height = image.size.1;
     let sc = 0.95;
@@ -68,7 +68,8 @@ fn make_plot(mut image: &mut Image, filename: &str,  x_scale: f64, y_scale: f64)
         let color = egui::Color32::from_rgb(
             (col_ind * 30) as u8,
             (255 - (col_ind * 20)) as u8,
-            (50 + col_ind * 10) as u8);
+            (50 + col_ind * 10) as u8,
+        );
         let tiles = 2;
         let x_offset = ((col_ind % tiles) * width / tiles + 10) as f64;
         let y_offset = (col_ind / tiles) as f64 * 180.0 + 120.0;
@@ -91,7 +92,7 @@ impl Default for PlotImage {
         for _ in 0..(size.0 * size.1) {
             pixels.push(egui::Color32::BLACK);
         }
-        let mut image = Image {size, pixels};
+        let mut image = Image { size, pixels };
         let filename = get_filename();
         make_plot(&mut image, &filename, 10.0, 50.0);
 
@@ -151,17 +152,7 @@ impl epi::App for PlotImage {
             tex_mngr,
         } = self;
 
-        let update_image;
-        if last_update.elapsed() > Duration::from_millis(1000) {
-            make_plot(image, &filename, 10.0, 50.0);
-            *last_update = Instant::now();
-            update_image = true;
-        } else {
-            update_image = false;
-        }
-
-        // This take 100% cpu
-        ctx.request_repaint();
+        let t0 = Instant::now();
 
         // Examples of how to create different panels and windows.
         // Pick whichever suits you.
@@ -225,7 +216,24 @@ impl epi::App for PlotImage {
                 // over the window- as noted above the repaint needs to be triggered.
                 // update the image pixels
                 // image.shift(1, 0);
+                //
+                //
+                let update_image;
+                if last_update.elapsed() > Duration::from_millis(1000) {
+                    // this takes around 50 ms unoptimized
+                    make_plot(image, &filename, 10.0, 50.0);
+                    *last_update = Instant::now();
+                    update_image = true;
+                    println!("----");
+                } else {
+                    update_image = false;
+                }
 
+                // This take a lot of cpu
+                ctx.request_repaint();
+                // println!("last update {:?}", last_update.elapsed());
+
+                // this takes around 50 ms unoptimized when update_image is true
                 if let Some(texture_id) = tex_mngr.texture(frame, update_image, &image) {
                     let size = egui::Vec2::new(
                         image.size.0 as f32 * *x_scale,
@@ -248,6 +256,7 @@ impl epi::App for PlotImage {
         // TODO(lucasw) this is a little glitchy when resizing the image
         // Resize the native window to be just the size we need it to be:
         frame.set_window_size(ctx.used_size());
+        println!("last update {:?}", t0.elapsed());
     }
 }
 
